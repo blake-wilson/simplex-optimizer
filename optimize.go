@@ -2,15 +2,22 @@ package main
 
 import (
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
+	"log"
+	"math"
 	"math/rand"
+	"os"
 	"sort"
 
 	"github.com/gonum/stat"
+	"github.com/llgcode/draw2d/draw2dimg"
 )
 
 const (
 	terminateThreshold = 0.01
-	maxIters           = 200
+	maxIters           = 10
 	expandCoeff        = 2
 	contractCoeff      = 0.5
 	shrinkCoeff        = 0.5
@@ -144,7 +151,7 @@ func shouldTerminate(s *Simplex) bool {
 	return s.StdDev() < terminateThreshold
 }
 
-func Optimize(eval func(p *Point) float64) {
+func Optimize(eval func(p *Point) float64) *Simplex {
 	dims := 2
 	points := initPoints(dims, dims+1)
 	simplex := NewSimplex(2)
@@ -162,7 +169,7 @@ func Optimize(eval func(p *Point) float64) {
 			}
 			finalVals += `}`
 			fmt.Printf("final values are %+v at %+v\n", simplex.Evaluations, finalVals)
-			return
+			return simplex
 		}
 		centroid := ComputeCentroid(simplex.Points...)
 		reflected := ReflectPoint(centroid, simplex.Points[len(simplex.Points)-1])
@@ -216,10 +223,12 @@ func main() {
 		//for _, v := range p.Terms {
 		//	sum += v
 		//}
-		return 10 - p.Terms[0]
+		// return 10 - p.Terms[0]
+		return p.Terms[1] - p.Terms[0]
 		//return sum
 	}
-	Optimize(evalFunc)
+	s := Optimize(evalFunc)
+	drawSimplex(s)
 }
 
 func initPoints(dim, count int) []*Point {
@@ -232,4 +241,145 @@ func initPoints(dim, count int) []*Point {
 		}
 	}
 	return points
+}
+
+// SubtractMean constructs a new simplex whose
+// points have been recentered around 0
+func (s *Simplex) SubtractMean() *Simplex {
+	averages := make([]float64, s.Dimension)
+	for _, p := range s.Points {
+		for d := 0; d < s.Dimension; d++ {
+			averages[d] += p.Terms[d]
+		}
+	}
+	for i := 0; i < len(averages); i++ {
+		averages[i] = averages[i] / float64(len(s.Points))
+	}
+
+	s2 := NewSimplex(s.Dimension)
+	s2.Points = make([]*Point, len(s.Points))
+	for i, p := range s.Points {
+		s2.Points[i] = NewPoint(s.Dimension)
+		for d := 0; d < s.Dimension; d++ {
+			s2.Points[i].Terms[d] = p.Terms[d] - averages[d]
+		}
+	}
+	return s2
+}
+
+// TranslateToPositive translates all the coordinates of the given
+// Simplex's points to nonnegative values
+func (s *Simplex) TranslateToPositive() *Simplex {
+	mins := make([]float64, s.Dimension)
+	for d := 0; d < len(s.Points[0].Terms); d++ {
+		mins[d] = s.Points[0].Terms[d]
+	}
+	for _, p := range s.Points[1:] {
+		for d := 0; d < len(p.Terms); d++ {
+			if p.Terms[d] < mins[d] {
+				mins[d] = p.Terms[d]
+			}
+		}
+	}
+	fmt.Printf("mins %+v\n", mins)
+	s2 := NewSimplex(s.Dimension)
+	newPoints := make([]*Point, len(s.Points))
+	for i, p := range s.Points {
+		newPoints[i] = NewPoint(s.Dimension)
+		fmt.Printf("translating point %+v\n", p)
+		for d := 0; d < len(p.Terms); d++ {
+			newPoints[i].Terms[d] = p.Terms[d] - mins[d]
+		}
+		fmt.Printf("new point %+v\n", newPoints[i])
+	}
+	s2.Points = newPoints
+	return s2
+}
+
+func drawSimplex(s *Simplex) {
+	imgWidth := 850.0
+	imgHeight := 850.0
+	rect := image.Rect(0, 0, int(imgWidth), int(imgHeight))
+	dest := image.NewRGBA(rect)
+	gc := draw2dimg.NewGraphicContext(dest)
+
+	// Set some properties
+	gc.SetFillColor(color.RGBA{0x44, 0xff, 0x44, 0xff})
+	gc.SetStrokeColor(color.RGBA{0x44, 0x44, 0x44, 0xff})
+	gc.SetLineWidth(5)
+
+	s2 := s.SubtractMean()
+	s2 = s2.TranslateToPositive()
+	sizeX, sizeY := simplexSize(s)
+	pxMult := math.Min(float64(imgWidth/sizeX), float64(imgHeight/sizeY))
+	for _, p := range s2.Points {
+		fmt.Printf("s2 points %+v\n", p)
+	}
+	fmt.Printf("px mult = %+v\n", pxMult)
+
+	//fmt.Printf("start at %+v\n", translateCoords(s2.Points[0], pxMult, rect).Terms)
+	start := translateCoords(s2.Points[0], pxMult, rect)
+	fmt.Printf("start at %+v\n", start.Terms)
+	gc.MoveTo(float64(start.Terms[0]), float64(start.Terms[1]))
+	for _, p := range s2.Points[1:] {
+		ip := translateCoords(p, pxMult, rect)
+		fmt.Printf("moved to %+v\n", ip.Terms)
+		gc.LineTo(float64(ip.Terms[0]), float64(ip.Terms[1]))
+		gc.FillStroke()
+		gc.MoveTo(float64(ip.Terms[0]), float64(ip.Terms[1]))
+	}
+	// Close the loop
+	fmt.Printf("moved to %+v\n", start.Terms)
+	gc.LineTo(float64(start.Terms[0]), float64(start.Terms[1]))
+	gc.FillStroke()
+
+	gc.Close()
+	img := dest.SubImage(rect)
+	writeImage(&img)
+}
+
+func writeImage(img *image.Image) {
+	f, err := os.Create("image.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := png.Encode(f, *img); err != nil {
+		f.Close()
+		log.Fatal(err)
+	}
+
+	if err := f.Close(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// simplexSize returns the height and width of a 2-D simplex
+func simplexSize(s *Simplex) (float64, float64) {
+	minX, maxX := s.Points[0].Terms[0], s.Points[0].Terms[0]
+	minY, maxY := s.Points[0].Terms[1], s.Points[0].Terms[1]
+	for _, p := range s.Points[1:] {
+		if p.Terms[0] < minX {
+			minX = p.Terms[0]
+		}
+		if p.Terms[0] > maxX {
+			maxX = p.Terms[0]
+		}
+		if p.Terms[1] < minY {
+			minY = p.Terms[1]
+		}
+		if p.Terms[1] > maxY {
+			maxY = p.Terms[1]
+		}
+	}
+	return maxX - minX, maxY - minY
+}
+
+func translateCoords(p *Point, stepSize float64, rect image.Rectangle) *Point {
+	p.Terms[0] *= stepSize
+	p.Terms[1] *= stepSize
+	imgPoint := NewPoint(2)
+	imgPoint.Terms[0] = p.Terms[0]
+	imgPoint.Terms[1] = p.Terms[1]
+	return imgPoint
 }

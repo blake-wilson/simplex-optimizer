@@ -40,3 +40,19 @@ func TestComputeCentroid(t *testing.T) {
 	}
 	assert.Equal(t, expected, ComputeCentroid(points...))
 }
+
+func TestDrawSimplex(t *testing.T) {
+	points := []*Point{{
+		Dims:  2,
+		Terms: []float64{0, 0},
+	}, {
+		Dims:  2,
+		Terms: []float64{10, 20},
+	}, {
+		Dims:  2,
+		Terms: []float64{20, 10},
+	}}
+	s := NewSimplex(2)
+	s.Points = points
+	drawSimplex(s)
+}
