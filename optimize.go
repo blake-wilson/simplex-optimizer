@@ -64,7 +64,7 @@ func (s *Simplex) StdDev() float64 {
 // Improve "improves" a simplex by replacing its worst
 // value with the given value
 func (s *Simplex) Improve(p *Point, value float64) {
-	i := sort.Search(len(s.Evaluations[0:len(s.Evaluations)-1]),
+	i := sort.Search(len(s.Evaluations[0:len(s.Evaluations)]),
 		func(i int) bool { return s.Evaluations[i] > value })
 	if i == len(s.Evaluations) {
 		panic(`Improve: provided value is worse than all existing values`)
@@ -73,21 +73,14 @@ func (s *Simplex) Improve(p *Point, value float64) {
 	// Prevent another slice allocation
 	// Do not copy the last element because it is the
 	// "worst" and will be trimmed
-	fmt.Printf("improve at i %+v\n", i)
 	copy(s.Points[i+1:], s.Points[i:len(s.Points)-1])
-	fmt.Printf("s.Evaluations: %+v\n", s.Evaluations)
 	copy(s.Evaluations[i+1:], s.Evaluations[i:len(s.Evaluations)-1])
-	fmt.Printf("s.Evaluations: %+v\n", s.Evaluations)
 	s.Points[i] = p
 	s.Evaluations[i] = value
 }
 
 func (s *Simplex) Cost() float64 {
-	cost := 0.0
-	for _, e := range s.Evaluations {
-		cost += e
-	}
-	return cost
+	return s.Evaluations[0]
 }
 
 func (s *Simplex) SetPoint(p *Point, value float64) {
@@ -155,6 +148,7 @@ func Optimize(eval func(p *Point) float64) *Simplex {
 	dims := 2
 	points := initPoints(dims, dims+1)
 	simplex := NewSimplex(2)
+
 	for _, p := range points {
 		simplex.SetPoint(p, eval(p))
 	}
@@ -169,11 +163,11 @@ func Optimize(eval func(p *Point) float64) *Simplex {
 			}
 			finalVals += `}`
 			fmt.Printf("final values are %+v at %+v\n", simplex.Evaluations, finalVals)
+			fmt.Printf("final cost is %+v\n", simplex.Cost())
 			return simplex
 		}
 		centroid := ComputeCentroid(simplex.Points...)
 		reflected := ReflectPoint(centroid, simplex.Points[len(simplex.Points)-1])
-		fmt.Printf("reflected %+v\n", reflected)
 		// if reflected is better than the second worst point,
 		// but not better than the best, obtain new simplex which
 		// includes the reflected point
@@ -186,12 +180,10 @@ func Optimize(eval func(p *Point) float64) *Simplex {
 		}
 		if reflectedEval < simplex.Evaluations[0] {
 			// reflected point is the best so far. Expand
-			fmt.Printf("expanding\n")
 			negatedCentroid := scalePoint(centroid, -1)
 			expanded := SumPoints(centroid, scalePoint(SumPoints(reflected, negatedCentroid), expandCoeff))
 			expandedEval := eval(expanded)
 			if expandedEval < reflectedEval {
-				fmt.Printf("use expanded val %+v\n", expanded)
 				simplex.Improve(expanded, expandedEval)
 			} else {
 				simplex.Improve(expanded, reflectedEval)
@@ -215,6 +207,7 @@ func Optimize(eval func(p *Point) float64) *Simplex {
 			simplex.Evaluations[i] = eval(p)
 		}
 	}
+	return simplex
 }
 
 func main() {
@@ -224,7 +217,7 @@ func main() {
 		//	sum += v
 		//}
 		// return 10 - p.Terms[0]
-		return p.Terms[1] - p.Terms[0]
+		return math.Abs(p.Terms[1] - p.Terms[0])
 		//return sum
 	}
 	s := Optimize(evalFunc)
@@ -297,6 +290,7 @@ func (s *Simplex) TranslateToPositive() *Simplex {
 }
 
 func drawSimplex(s *Simplex) {
+
 	imgWidth := 850.0
 	imgHeight := 850.0
 	rect := image.Rect(0, 0, int(imgWidth), int(imgHeight))
@@ -305,7 +299,8 @@ func drawSimplex(s *Simplex) {
 
 	// Set some properties
 	gc.SetFillColor(color.RGBA{0x44, 0xff, 0x44, 0xff})
-	gc.SetStrokeColor(color.RGBA{0x44, 0x44, 0x44, 0xff})
+	// gc.SetStrokeColor(color.RGBA{0x44, 0x44, 0x44, 0xff})
+	gc.SetStrokeColor(color.RGBA{0xff, 0x00, 0x00, 0xff})
 	gc.SetLineWidth(5)
 
 	s2 := s.SubtractMean()
@@ -317,25 +312,28 @@ func drawSimplex(s *Simplex) {
 	}
 	fmt.Printf("px mult = %+v\n", pxMult)
 
-	//fmt.Printf("start at %+v\n", translateCoords(s2.Points[0], pxMult, rect).Terms)
-	start := translateCoords(s2.Points[0], pxMult, rect)
+	start := translateCoords(s2.Points[0], pxMult)
+
+	colors := []color.RGBA{{
+		0x00, 0xff, 0x00, 0xff,
+	}, {
+		0x00, 0x00, 0xff, 0xff,
+	}}
 	fmt.Printf("start at %+v\n", start.Terms)
 	gc.MoveTo(float64(start.Terms[0]), float64(start.Terms[1]))
-	for _, p := range s2.Points[1:] {
-		ip := translateCoords(p, pxMult, rect)
+	for i, p := range s2.Points[1:] {
+		ip := translateCoords(p, pxMult)
 		fmt.Printf("moved to %+v\n", ip.Terms)
 		gc.LineTo(float64(ip.Terms[0]), float64(ip.Terms[1]))
 		gc.FillStroke()
 		gc.MoveTo(float64(ip.Terms[0]), float64(ip.Terms[1]))
+		gc.SetStrokeColor(colors[i])
 	}
 	// Close the loop
 	fmt.Printf("moved to %+v\n", start.Terms)
 	gc.LineTo(float64(start.Terms[0]), float64(start.Terms[1]))
 	gc.FillStroke()
 
-	gc.Close()
-	img := dest.SubImage(rect)
-	writeImage(&img)
 }
 
 func writeImage(img *image.Image) {
@@ -375,7 +373,7 @@ func simplexSize(s *Simplex) (float64, float64) {
 	return maxX - minX, maxY - minY
 }
 
-func translateCoords(p *Point, stepSize float64, rect image.Rectangle) *Point {
+func translateCoords(p *Point, stepSize float64) *Point {
 	p.Terms[0] *= stepSize
 	p.Terms[1] *= stepSize
 	imgPoint := NewPoint(2)
