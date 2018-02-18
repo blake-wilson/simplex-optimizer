@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"image"
 	"image/color"
@@ -10,6 +11,7 @@ import (
 	"math/rand"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/gonum/stat"
 	"github.com/llgcode/draw2d/draw2dimg"
@@ -148,12 +150,20 @@ func Optimize(eval func(p *Point) float64) *Simplex {
 	dims := 2
 	points := initPoints(dims, dims+1)
 	simplex := NewSimplex(2)
+	file, err := os.Create(`simplex.txt`)
+	if err != nil {
+		panic(err.Error())
+	}
+	defer file.Close()
+	w := bufio.NewWriter(file)
+	file.Sync()
 
 	for _, p := range points {
 		simplex.SetPoint(p, eval(p))
 	}
 	numIters := 0
 	for {
+		writeSimplex(simplex, w)
 		fmt.Printf("Cost: %+v\n", simplex.Cost())
 		numIters++
 		if numIters > maxIters || shouldTerminate(simplex) {
@@ -164,7 +174,7 @@ func Optimize(eval func(p *Point) float64) *Simplex {
 			finalVals += `}`
 			fmt.Printf("final values are %+v at %+v\n", simplex.Evaluations, finalVals)
 			fmt.Printf("final cost is %+v\n", simplex.Cost())
-			return simplex
+			break
 		}
 		centroid := ComputeCentroid(simplex.Points...)
 		reflected := ReflectPoint(centroid, simplex.Points[len(simplex.Points)-1])
@@ -207,6 +217,11 @@ func Optimize(eval func(p *Point) float64) *Simplex {
 			simplex.Evaluations[i] = eval(p)
 		}
 	}
+	unflushedBufferSize := w.Buffered()
+	log.Printf("Bytes buffered: %d\n", unflushedBufferSize)
+
+	w.Flush()
+	file.Sync()
 	return simplex
 }
 
@@ -274,19 +289,46 @@ func (s *Simplex) TranslateToPositive() *Simplex {
 			}
 		}
 	}
-	fmt.Printf("mins %+v\n", mins)
 	s2 := NewSimplex(s.Dimension)
 	newPoints := make([]*Point, len(s.Points))
 	for i, p := range s.Points {
 		newPoints[i] = NewPoint(s.Dimension)
-		fmt.Printf("translating point %+v\n", p)
 		for d := 0; d < len(p.Terms); d++ {
 			newPoints[i].Terms[d] = p.Terms[d] - mins[d]
 		}
-		fmt.Printf("new point %+v\n", newPoints[i])
 	}
 	s2.Points = newPoints
 	return s2
+}
+
+func writeSimplex(s *Simplex, w *bufio.Writer) {
+	// For xi = (xi1, xi2, ..., xin), zi = eval(xi)
+	// Print the Simplex in the format
+	// Simplex
+	// x11,x12,...,x1n,z1
+	// x21,x22,...,x2n,z2
+	// ..
+	// xn1,xn2,...,x(n+1)n, zn+1
+	// End
+	_, err := w.WriteString("Simplex\n")
+	if err != nil {
+		panic(err.Error())
+	}
+	for i, p := range s.Points {
+		terms := make([]string, len(p.Terms))
+		for j, d := range p.Terms {
+			terms[j] = fmt.Sprintf("%f", d)
+		}
+		terms = append(terms, fmt.Sprintf("%f", s.Evaluations[i]))
+		_, err = w.WriteString(strings.Join(terms, `,`) + "\n")
+		if err != nil {
+			panic(err.Error())
+		}
+	}
+	_, err = w.WriteString("End\n")
+	if err != nil {
+		panic(err.Error())
+	}
 }
 
 func drawSimplex(s *Simplex) {
