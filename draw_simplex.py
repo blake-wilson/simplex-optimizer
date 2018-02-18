@@ -3,7 +3,11 @@ import plotly.graph_objs as go
 
 
 def draw_simplex(points):
-	trace = go.Heatmap(z=points)
+	x = [x for (x, _, _) in points]
+	y = [y for (_, y, _) in points]
+	z = [z for (_, _, z) in points]
+	print("X: {0}\n Y: {1}\n Z: {2}\n".format(x, y, z))
+	trace = go.Heatmap(x=x, y=y, z=z)
 	data=[trace]
 	py.iplot(data, filename='basic-heatmap')
 
