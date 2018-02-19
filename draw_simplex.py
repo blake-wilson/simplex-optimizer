@@ -1,15 +1,34 @@
 import plotly.plotly as py
 import plotly.graph_objs as go
+import uuid
 
 
 def draw_simplex(points):
 	x = [x for (x, _, _) in points]
 	y = [y for (_, y, _) in points]
 	z = [z for (_, _, z) in points]
+
+	labels = ["{0}: {1}".format(i, z_val) for i in range(0, len(z)) for z_val in z]
 	print("X: {0}\n Y: {1}\n Z: {2}\n".format(x, y, z))
-	trace = go.Heatmap(x=x, y=y, z=z)
+	# trace = go.Heatmap(x=x, y=y, z=z)
+	trace = go.Scatter(
+		x=x,
+		y=y,
+		text=labels,
+		mode='markers',
+		marker=dict(
+			size='16',
+			color = z,
+			colorscale='Viridis',
+			showscale=True
+    	)
+	)
 	data=[trace]
-	py.iplot(data, filename='basic-heatmap')
+	layout = go.Layout(
+		# title='$\\frac{\\sin(\\sqrt{(x^2 + y^2)})}{\\sqrt{(x^2 + y^2}}$'
+	)
+	fig = go.Figure(data=data, layout=layout)
+	py.iplot(fig, filename=str(uuid.uuid4()))
 
 def read_simplex(filepath):
 	"""read_simplex reads values of the simplex from the given

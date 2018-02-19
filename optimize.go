@@ -232,7 +232,17 @@ func main() {
 		//	sum += v
 		//}
 		// return 10 - p.Terms[0]
-		return math.Abs(p.Terms[1] - p.Terms[0])
+
+		// ex1
+		// return math.Abs(p.Terms[1] - p.Terms[0])
+
+		// ex2
+		// return math.Pow(p.Terms[1]-3, 2) + math.Pow(p.Terms[0]-4, 2)
+
+		// ex3
+		v := math.Sqrt(math.Pow(p.Terms[0], 2)+
+			math.Pow(p.Terms[1], 2)) + math.Nextafter(1.0, 2.0) - 1.0
+		return math.Sin(v) / v
 		//return sum
 	}
 	s := Optimize(evalFunc)
