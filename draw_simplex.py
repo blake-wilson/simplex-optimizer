@@ -24,9 +24,7 @@ def draw_simplex(points):
     	)
 	)
 	data=[trace]
-	layout = go.Layout(
-		# title='$\\frac{\\sin(\\sqrt{(x^2 + y^2)})}{\\sqrt{(x^2 + y^2}}$'
-	)
+	layout = go.Layout()
 	fig = go.Figure(data=data, layout=layout)
 	py.iplot(fig, filename=str(uuid.uuid4()))
 

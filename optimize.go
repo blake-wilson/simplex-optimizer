@@ -184,6 +184,7 @@ func Optimize(eval func(p *Point) float64) *Simplex {
 		reflectedEval := eval(reflected)
 		if reflectedEval < simplex.Evaluations[simplex.Dimension] &&
 			reflectedEval > simplex.Evaluations[0] {
+			fmt.Printf("Reflect\n\n")
 
 			simplex.Improve(reflected, reflectedEval)
 			continue
@@ -195,7 +196,10 @@ func Optimize(eval func(p *Point) float64) *Simplex {
 			expandedEval := eval(expanded)
 			if expandedEval < reflectedEval {
 				simplex.Improve(expanded, expandedEval)
+				fmt.Printf("Expand\n\n")
+
 			} else {
+				fmt.Printf("Reflect\n\n")
 				simplex.Improve(expanded, reflectedEval)
 			}
 			continue
@@ -203,12 +207,14 @@ func Optimize(eval func(p *Point) float64) *Simplex {
 		contracted := ContractPoint(centroid, simplex.Points[len(simplex.Points)-1])
 		contractedEval := eval(contracted)
 		if contractedEval < simplex.Evaluations[len(simplex.Points)-1] {
+			fmt.Printf("Contract\n\n")
 			simplex.Improve(contracted, contractedEval)
 			continue
 		}
 		// Shrink the Simplex
 		best := simplex.Points[0]
 		for i := range simplex.Points[1:] {
+			fmt.Printf("Shrink\n\n")
 			negated := scalePoint(simplex.Points[i], -1)
 			shrunk := scalePoint(SumPoints(negated, best),
 				shrinkCoeff)
@@ -217,8 +223,6 @@ func Optimize(eval func(p *Point) float64) *Simplex {
 			simplex.Evaluations[i] = eval(p)
 		}
 	}
-	unflushedBufferSize := w.Buffered()
-	log.Printf("Bytes buffered: %d\n", unflushedBufferSize)
 
 	w.Flush()
 	file.Sync()
@@ -359,10 +363,6 @@ func drawSimplex(s *Simplex) {
 	s2 = s2.TranslateToPositive()
 	sizeX, sizeY := simplexSize(s)
 	pxMult := math.Min(float64(imgWidth/sizeX), float64(imgHeight/sizeY))
-	for _, p := range s2.Points {
-		fmt.Printf("s2 points %+v\n", p)
-	}
-	fmt.Printf("px mult = %+v\n", pxMult)
 
 	start := translateCoords(s2.Points[0], pxMult)
 
@@ -371,18 +371,15 @@ func drawSimplex(s *Simplex) {
 	}, {
 		0x00, 0x00, 0xff, 0xff,
 	}}
-	fmt.Printf("start at %+v\n", start.Terms)
 	gc.MoveTo(float64(start.Terms[0]), float64(start.Terms[1]))
 	for i, p := range s2.Points[1:] {
 		ip := translateCoords(p, pxMult)
-		fmt.Printf("moved to %+v\n", ip.Terms)
 		gc.LineTo(float64(ip.Terms[0]), float64(ip.Terms[1]))
 		gc.FillStroke()
 		gc.MoveTo(float64(ip.Terms[0]), float64(ip.Terms[1]))
 		gc.SetStrokeColor(colors[i])
 	}
 	// Close the loop
-	fmt.Printf("moved to %+v\n", start.Terms)
 	gc.LineTo(float64(start.Terms[0]), float64(start.Terms[1]))
 	gc.FillStroke()
 
